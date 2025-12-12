@@ -2,12 +2,12 @@ export default async function handler(req, res) {
   try {
     if (req.method !== "POST") return res.status(405).json({ error: "Use POST" });
 
-    const { gtin, nome, preco } = req.body || {};
+    const { pageId, gtin, nome, preco, imagemUrl } = req.body || {};
+    const PID = String(pageId ?? "").trim();
     const GTIN = String(gtin ?? "").trim();
     const NOME = String(nome ?? "").trim();
-
-    // preço pode ser vazio
     const PRECO_RAW = (preco ?? "").toString().trim();
+    const IMG_URL = String(imagemUrl ?? "").trim();
 
     if (!GTIN) return res.status(400).json({ error: "GTIN obrigatório" });
     if (!NOME) return res.status(400).json({ error: "Nome obrigatório" });
@@ -15,7 +15,6 @@ export default async function handler(req, res) {
     const notionToken = process.env.NOTION_TOKEN;
     const dbId = process.env.NOTION_DB_ID;
 
-    // 1) Descobre os tipos das propriedades na sua database (para gravar corretamente)
     const dbResp = await fetch(`https://api.notion.com/v1/databases/${dbId}`, {
       headers: {
         "Authorization": `Bearer ${notionToken}`,
@@ -28,15 +27,63 @@ export default async function handler(req, res) {
     const pGTIN = db.properties?.["GTIN"];
     const pNome = db.properties?.["Nome dos Produtos"];
     const pPreco = db.properties?.["Domingas R$"];
+    const pImg  = db.properties?.["IMAGEM"]; // pode existir ou não
 
     if (!pGTIN || !pNome || !pPreco) {
       return res.status(400).json({
         error: "Propriedades não encontradas. Confira os nomes no Notion.",
-        details: { temGTIN: !!pGTIN, temNome: !!pNome, temPreco: !!pPreco }
+        details: { temGTIN: !!pGTIN, temNome: !!pNome, temPreco: !!pPreco, temImg: !!pImg }
       });
     }
 
-    // 2) Procura se já existe item com esse GTIN
+    const propGTIN = () => ({ rich_text: [{ type: "text", text: { content: GTIN } }] });
+    const propNome = () => ({ title: [{ type: "text", text: { content: NOME } }] });
+
+    const propPreco = () => {
+      if (!PRECO_RAW) return pPreco.type === "number" ? { number: null } : { rich_text: [] };
+
+      if (pPreco.type === "number") {
+        const normalized = PRECO_RAW.replace(/\./g, "").replace(",", ".");
+        const n = Number(normalized);
+        return { number: Number.isFinite(n) ? n : null };
+      }
+      return { rich_text: [{ type: "text", text: { content: PRECO_RAW } }] };
+    };
+
+    const properties = {
+      "GTIN": propGTIN(),
+      "Nome dos Produtos": propNome(),
+      "Domingas R$": propPreco(),
+    };
+
+    // IMAGEM (opcional): se você quiser editar via URL
+    if (pImg && IMG_URL) {
+      properties["IMAGEM"] = {
+        files: [
+          { name: "imagem", external: { url: IMG_URL } }
+        ]
+      };
+    }
+
+    // ✅ Se veio pageId, atualiza esse item (mais seguro)
+    if (PID) {
+      const updResp = await fetch(`https://api.notion.com/v1/pages/${PID}`, {
+        method: "PATCH",
+        headers: {
+          "Authorization": `Bearer ${notionToken}`,
+          "Content-Type": "application/json",
+          "Notion-Version": "2022-06-28",
+        },
+        body: JSON.stringify({ properties }),
+      });
+
+      const upd = await updResp.json();
+      if (!updResp.ok) return res.status(500).json({ error: "Erro ao atualizar", details: upd });
+
+      return res.json({ ok: true, mode: "updated" });
+    }
+
+    // Caso não venha pageId, faz upsert por GTIN
     const qResp = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
       method: "POST",
       headers: {
@@ -55,37 +102,6 @@ export default async function handler(req, res) {
 
     const existing = qData.results?.[0];
 
-    // helpers de propriedades
-    const propGTIN = () => ({ rich_text: [{ type: "text", text: { content: GTIN } }] });
-    const propNome = () => ({ title: [{ type: "text", text: { content: NOME } }] });
-
-    // preço: grava conforme o tipo real
-    const propPreco = () => {
-      if (!PRECO_RAW) {
-        // vazio: se for number, seta null; se for rich_text, seta vazio
-        return pPreco.type === "number"
-          ? { number: null }
-          : { rich_text: [] };
-      }
-
-      if (pPreco.type === "number") {
-        // aceita "70", "70,50", "70.50"
-        const normalized = PRECO_RAW.replace(/\./g, "").replace(",", ".");
-        const n = Number(normalized);
-        return { number: Number.isFinite(n) ? n : null };
-      }
-
-      // se não for number, guarda como texto mesmo
-      return { rich_text: [{ type: "text", text: { content: PRECO_RAW } }] };
-    };
-
-    const properties = {
-      "GTIN": propGTIN(),
-      "Nome dos Produtos": propNome(),
-      "Domingas R$": propPreco(),
-    };
-
-    // 3) Atualiza se existir; senão cria
     if (existing?.id) {
       const updResp = await fetch(`https://api.notion.com/v1/pages/${existing.id}`, {
         method: "PATCH",
