@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     const PRECO_RAW = (preco ?? "").toString().trim();
     const IMG_URL = String(imagemUrl ?? "").trim();
 
-    if (!GTIN) return res.status(400).json({ error: "GTIN obrigatório" });
+   // if (!GTIN) return res.status(400).json({ error: "GTIN obrigatório" });
     if (!NOME) return res.status(400).json({ error: "Nome obrigatório" });
 
     const notionToken = process.env.NOTION_TOKEN;
@@ -60,7 +60,23 @@ export default async function handler(req, res) {
       }
       return { rich_text: [{ type: "text", text: { content: PRECO_RAW } }] };
     };
+    
+const properties = {
+  "Nome dos Produtos": propNome(),
+  "Domingas R$": propPreco(),
+};
 
+// ✅ GTIN opcional: só envia se tiver valor
+if (GTIN) {
+  properties["GTIN"] = propGTIN();
+} else {
+  // Se GTIN estiver vazio, você escolhe UMA das opções abaixo:
+  // Opção A: limpar GTIN no Notion
+  properties["GTIN"] = { rich_text: [] };
+
+  // Opção B: NÃO mexer no GTIN existente no Notion (mais conservador)
+  // (se escolher a Opção B, apague a linha acima)
+}
     const properties = {
       "GTIN": propGTIN(),
       "Nome dos Produtos": propNome(),
