@@ -1,8 +1,8 @@
 export default async function handler(req, res) {
   try {
-    const q = (req.query.q ?? "").toString().trim();          // busca geral
-    const gtin = (req.query.gtin ?? "").toString().trim();    // opcional
-    const name = (req.query.name ?? "").toString().trim();    // opcional
+    const q = (req.query.q ?? "").toString().trim();
+    const gtin = (req.query.gtin ?? "").toString().trim();
+    const name = (req.query.name ?? "").toString().trim();
 
     const notionToken = process.env.NOTION_TOKEN;
     const dbId = process.env.NOTION_DB_ID;
@@ -11,33 +11,24 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Faltam variáveis NOTION_TOKEN / NOTION_DB_ID" });
     }
 
-    // Se mandarem gtin/name explicitamente, usa eles.
-    // Se mandarem só q, decide: se for só números -> GTIN; senão -> Nome.
     let gtinQuery = gtin;
     let nameQuery = name;
 
     if (!gtinQuery && !nameQuery && q) {
-      if (/^\d+$/.test(q)) gtinQuery = q;  // só dígitos = GTIN
-      else nameQuery = q;                 // texto = Nome
+      if (/^\d+$/.test(q)) gtinQuery = q;
+      else nameQuery = q;
     }
 
     if (!gtinQuery && !nameQuery) {
       return res.status(400).json({ error: "Informe GTIN ou Nome" });
     }
 
-    // filtro OR: GTIN == ...  OU  Nome contém ...
     const orFilters = [];
     if (gtinQuery) {
-      orFilters.push({
-        property: "GTIN",
-        rich_text: { equals: gtinQuery },
-      });
+      orFilters.push({ property: "GTIN", rich_text: { equals: gtinQuery } });
     }
     if (nameQuery) {
-      orFilters.push({
-        property: "Nome dos Produtos",
-        title: { contains: nameQuery },
-      });
+      orFilters.push({ property: "Nome dos Produtos", title: { contains: nameQuery } });
     }
 
     const r = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
@@ -60,12 +51,11 @@ export default async function handler(req, res) {
     if (!results.length) return res.status(404).json({ found: false, items: [] });
 
     const items = results.map((page) => {
-      const props = page.properties;
+      const props = page.properties ?? {};
 
       const nameOut =
         props["Nome dos Produtos"]?.title?.map(t => t.plain_text).join("") || "Sem nome";
 
-      // Preço pode ser Number no Notion, ou texto (caso sua coluna seja texto)
       const preco =
         props["Domingas R$"]?.number ??
         props["Domingas R$"]?.rich_text?.map(t => t.plain_text).join("") ??
@@ -76,11 +66,10 @@ export default async function handler(req, res) {
         props["IMAGEM"]?.files?.[0]?.external?.url ??
         null;
 
-      // GTIN como texto
       const gtinOut =
-        props["GTIN"]?.rich_text?.map(t => t.plain_text).join("") || null;
+        props["GTIN"]?.rich_text?.map(t => t.plain_text).join("") || "";
 
-      return { name: nameOut, preco, img, gtin: gtinOut };
+      return { pageId: page.id, name: nameOut, preco, img, gtin: gtinOut };
     });
 
     res.json({ found: true, items });
