@@ -3,43 +3,71 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Cadastro/Edição</title>
+  <title>Cadastro / Edição</title>
   <link rel="manifest" href="/manifest.json">
+
   <style>
     body{font-family:system-ui;background:#0b0b0b;color:#fff;margin:0}
     header{padding:18px;font-size:26px;font-weight:900;text-align:center}
     .wrap{padding:16px;display:grid;gap:12px;max-width:720px;margin:0 auto}
+
     button,input{font-size:22px;padding:16px;border-radius:16px;border:0;width:100%}
     button{background:#2f7cff;color:#fff;font-weight:900}
     button.save{background:#22c55e;color:#000}
     button.gray{background:#3a3a3a}
+
     .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     input{background:#fff;color:#000}
+
     .hint{font-size:18px;opacity:.9;line-height:1.3;text-align:center}
     .card{background:#151515;border-radius:18px;padding:16px}
-    .ok{display:none;background:#22c55e;color:#071a0a;font-weight:900;text-align:center;padding:12px;border-radius:14px}
+
+    .ok{
+      display:none;
+      background:#22c55e;
+      color:#071a0a;
+      font-weight:900;
+      text-align:center;
+      padding:12px;
+      border-radius:14px;
+    }
     .ok.show{display:block}
+
     #scanVideo{width:100%;border-radius:18px;background:#000;margin-top:10px}
-    .resultItem{display:grid;gap:10px;padding:12px;border-radius:14px;background:#101010;border:1px solid #2a2a2a}
+
+    .resultItem{
+      display:grid;
+      gap:10px;
+      padding:12px;
+      border-radius:14px;
+      background:#101010;
+      border:1px solid #2a2a2a;
+    }
+
     .resultTitle{font-size:22px;font-weight:900}
     .price{font-size:20px;font-weight:800}
     .price span{background:#ffe45c;color:#111;padding:4px 10px;border-radius:10px}
+
     img{width:100%;max-height:260px;object-fit:contain;border-radius:14px;background:#000}
     hr{border:0;border-top:1px solid #2a2a2a;margin:10px 0}
     .small{font-size:16px;opacity:.9}
   </style>
 </head>
+
 <body>
 <header>Cadastro / Edição</header>
 
 <div class="wrap">
 
-  <div class="hint">🔎 Busque por <b>nome</b> ou <b>GTIN</b>. Se selecionar um item, você pode editar e salvar.</div>
+  <div class="hint">
+    🔎 Busque por <b>nome</b> ou <b>GTIN</b>. Selecione um item para editar.
+  </div>
 
   <input id="search" placeholder="Buscar por nome ou GTIN">
+
   <div class="row">
-    <button onclick="buscar()">🔍 Buscar</button>
-    <button class="gray" onclick="limparTudo()">🧹 Limpar</button>
+    <button id="btnBuscar">🔍 Buscar</button>
+    <button class="gray" id="btnLimpar">🧹 Limpar</button>
   </div>
 
   <div class="card" id="status">Aguardando…</div>
@@ -49,11 +77,13 @@
   <div class="ok" id="ok">✅ CÓDIGO LIDO!</div>
 
   <div class="card" id="editor" style="display:none;">
-    <div class="hint" style="margin-bottom:10px;"><b>Edição</b> (você pode escanear para preencher o GTIN)</div>
+    <div class="hint" style="margin-bottom:10px;">
+      <b>Edição</b> (para mudar GTIN, use “Escanear GTIN”)
+    </div>
 
     <div class="row">
-      <button onclick="scanToGtin()">📷 Escanear GTIN</button>
-      <button class="gray" onclick="stopScan()">✖ Fechar câmera</button>
+      <button id="btnScanGtin">📷 Escanear GTIN</button>
+      <button class="gray" id="btnFecharCam">✖ Fechar câmera</button>
     </div>
 
     <input id="gtin" placeholder="GTIN">
@@ -61,7 +91,7 @@
     <input id="preco" placeholder="Domingas R$ (opcional)">
     <input id="imagemUrl" placeholder="URL da imagem (opcional — só se quiser trocar)">
 
-    <button class="save" onclick="salvar()">💾 Salvar no Notion</button>
+    <button class="save" id="btnSalvar">💾 Salvar no Notion</button>
 
     <div id="preview" style="margin-top:12px;"></div>
   </div>
@@ -74,10 +104,15 @@ let reader=null;
 let scanning=false;
 let videoEl=null;
 
-let selectedPageId = ""; // 👈 super importante: atualiza o item certo
-let lastFoundItems = [];
+let selectedPageId="";     // atualiza o item correto
+let lastFoundItems=[];
 
-function setStatus(msg){ document.getElementById("status").textContent = msg; }
+const statusEl = document.getElementById("status");
+const resultsBox = document.getElementById("results");
+const editorEl = document.getElementById("editor");
+const okEl = document.getElementById("ok");
+
+function setStatus(msg){ statusEl.textContent = msg; }
 
 function beep(){
   try{
@@ -91,9 +126,8 @@ function beep(){
 }
 
 function flashGreen(){
-  const ok=document.getElementById("ok");
-  ok.classList.add("show");
-  setTimeout(()=>ok.classList.remove("show"),800);
+  okEl.classList.add("show");
+  setTimeout(()=>okEl.classList.remove("show"),800);
 }
 
 function escapeHtml(s){
@@ -121,7 +155,7 @@ function stopScan(){
 }
 
 function showEditor(show){
-  document.getElementById("editor").style.display = show ? "block" : "none";
+  editorEl.style.display = show ? "block" : "none";
 }
 
 function renderPreview(item){
@@ -142,7 +176,6 @@ async function buscar(){
   if(!q){ setStatus("Digite um nome ou GTIN para buscar."); return; }
 
   setStatus("Buscando no Notion…");
-  const resultsBox = document.getElementById("results");
   resultsBox.style.display = "none";
   resultsBox.innerHTML = "";
 
@@ -163,7 +196,7 @@ async function buscar(){
 
   resultsBox.style.display = "block";
   resultsBox.innerHTML = d.items.map((it, idx) => `
-    <div class="resultItem" onclick="selecionar(${idx})">
+    <div class="resultItem" data-idx="${idx}">
       <div class="resultTitle">${escapeHtml(it.name)}</div>
       <div class="price">Preço: <span>${escapeHtml(formatPrice(it.preco))}</span></div>
       <div class="small">GTIN: ${escapeHtml(it.gtin || "—")}</div>
@@ -171,9 +204,17 @@ async function buscar(){
       <div class="small">Toque para editar</div>
     </div>
   `).join("<hr>");
+
+  // ✅ CORREÇÃO: usa addEventListener (funciona em iOS/Android/PWA)
+  resultsBox.querySelectorAll(".resultItem").forEach(el => {
+    el.addEventListener("click", () => {
+      const idx = Number(el.dataset.idx);
+      selecionar(idx);
+    });
+  });
 }
 
-window.selecionar = function(i){
+function selecionar(i){
   stopScan();
   const it = lastFoundItems[i];
   if(!it) return;
@@ -183,13 +224,12 @@ window.selecionar = function(i){
   document.getElementById("gtin").value = it.gtin || "";
   document.getElementById("nome").value = it.name || "";
   document.getElementById("preco").value = (it.preco ?? "") === null ? "" : String(it.preco ?? "");
-  document.getElementById("imagemUrl").value = ""; // só preenche se você quiser trocar
+  document.getElementById("imagemUrl").value = ""; // só se quiser trocar
 
   showEditor(true);
   setStatus("Editando. Se quiser mudar o GTIN, use “Escanear GTIN”.");
-
   renderPreview(it);
-};
+}
 
 async function scanToGtin(){
   if(scanning) return;
@@ -201,7 +241,7 @@ async function scanToGtin(){
   videoEl = document.createElement("video");
   videoEl.id = "scanVideo";
   videoEl.setAttribute("playsinline","true");
-  document.querySelector(".wrap").insertBefore(videoEl, document.getElementById("status"));
+  document.querySelector(".wrap").insertBefore(videoEl, statusEl);
 
   const hints = new Map();
   hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[
@@ -239,7 +279,7 @@ async function salvar(){
   if(!gtin){ setStatus("Informe o GTIN (você pode escanear)."); return; }
   if(!nome){ setStatus("Informe o Nome dos Produtos."); return; }
   if(!selectedPageId){
-    setStatus("Selecione um item nos resultados para editar. (ou, se quiser criar novo, me fala que eu adiciono o modo 'Criar novo').");
+    setStatus("Selecione um item na lista para editar.");
     return;
   }
 
@@ -264,14 +304,27 @@ async function salvar(){
 function limparTudo(){
   stopScan();
   document.getElementById("search").value = "";
-  document.getElementById("results").style.display = "none";
-  document.getElementById("results").innerHTML = "";
+  resultsBox.style.display = "none";
+  resultsBox.innerHTML = "";
   selectedPageId = "";
   lastFoundItems = [];
   showEditor(false);
   document.getElementById("preview").innerHTML = "";
   setStatus("Aguardando…");
 }
+
+// atalhos de botão
+document.getElementById("btnBuscar").addEventListener("click", buscar);
+document.getElementById("btnLimpar").addEventListener("click", limparTudo);
+document.getElementById("btnScanGtin").addEventListener("click", scanToGtin);
+document.getElementById("btnFecharCam").addEventListener("click", stopScan);
+document.getElementById("btnSalvar").addEventListener("click", salvar);
+
+// Enter no teclado faz buscar
+document.getElementById("search").addEventListener("keydown", (e) => {
+  if(e.key === "Enter") buscar();
+});
 </script>
+
 </body>
 </html>
