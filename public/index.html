@@ -254,7 +254,7 @@ async function salvar(){
   const preco = document.getElementById("preco").value.trim();
   const imagemUrl = document.getElementById("imagemUrl").value.trim();
 
-  if(!gtin){ setStatus("Informe o GTIN (você pode escanear)."); return; }
+// GTIN opcional
   if(!nome){ setStatus("Informe o Nome dos Produtos."); return; }
   if(!selectedPageId){ setStatus("Selecione um item na lista para editar."); return; }
 
