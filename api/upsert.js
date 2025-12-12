@@ -2,6 +2,17 @@ export default async function handler(req, res) {
   try {
     if (req.method !== "POST") return res.status(405).json({ error: "Use POST" });
 
+    // ✅ senha: exige header X-EDIT-PASSWORD
+    const required = (process.env.EDIT_PASSWORD ?? "").toString();
+    const provided = (req.headers["x-edit-password"] ?? "").toString();
+
+    if (!required) {
+      return res.status(500).json({ error: "EDIT_PASSWORD não configurada na Vercel" });
+    }
+    if (provided !== required) {
+      return res.status(401).json({ error: "Senha inválida" });
+    }
+
     const { pageId, gtin, nome, preco, imagemUrl } = req.body || {};
     const PID = String(pageId ?? "").trim();
     const GTIN = String(gtin ?? "").trim();
@@ -27,7 +38,7 @@ export default async function handler(req, res) {
     const pGTIN = db.properties?.["GTIN"];
     const pNome = db.properties?.["Nome dos Produtos"];
     const pPreco = db.properties?.["Domingas R$"];
-    const pImg  = db.properties?.["IMAGEM"]; // pode existir ou não
+    const pImg  = db.properties?.["IMAGEM"];
 
     if (!pGTIN || !pNome || !pPreco) {
       return res.status(400).json({
@@ -56,16 +67,13 @@ export default async function handler(req, res) {
       "Domingas R$": propPreco(),
     };
 
-    // IMAGEM (opcional): se você quiser editar via URL
     if (pImg && IMG_URL) {
       properties["IMAGEM"] = {
-        files: [
-          { name: "imagem", external: { url: IMG_URL } }
-        ]
+        files: [{ name: "imagem", external: { url: IMG_URL } }]
       };
     }
 
-    // ✅ Se veio pageId, atualiza esse item (mais seguro)
+    // ✅ atualiza por pageId (mais seguro)
     if (PID) {
       const updResp = await fetch(`https://api.notion.com/v1/pages/${PID}`, {
         method: "PATCH",
@@ -83,59 +91,7 @@ export default async function handler(req, res) {
       return res.json({ ok: true, mode: "updated" });
     }
 
-    // Caso não venha pageId, faz upsert por GTIN
-    const qResp = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${notionToken}`,
-        "Content-Type": "application/json",
-        "Notion-Version": "2022-06-28",
-      },
-      body: JSON.stringify({
-        filter: { property: "GTIN", rich_text: { equals: GTIN } },
-        page_size: 1,
-      }),
-    });
-
-    const qData = await qResp.json();
-    if (!qResp.ok) return res.status(500).json({ error: "Erro query Notion", details: qData });
-
-    const existing = qData.results?.[0];
-
-    if (existing?.id) {
-      const updResp = await fetch(`https://api.notion.com/v1/pages/${existing.id}`, {
-        method: "PATCH",
-        headers: {
-          "Authorization": `Bearer ${notionToken}`,
-          "Content-Type": "application/json",
-          "Notion-Version": "2022-06-28",
-        },
-        body: JSON.stringify({ properties }),
-      });
-
-      const upd = await updResp.json();
-      if (!updResp.ok) return res.status(500).json({ error: "Erro ao atualizar", details: upd });
-
-      return res.json({ ok: true, mode: "updated" });
-    } else {
-      const createResp = await fetch(`https://api.notion.com/v1/pages`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${notionToken}`,
-          "Content-Type": "application/json",
-          "Notion-Version": "2022-06-28",
-        },
-        body: JSON.stringify({
-          parent: { database_id: dbId },
-          properties,
-        }),
-      });
-
-      const created = await createResp.json();
-      if (!createResp.ok) return res.status(500).json({ error: "Erro ao criar", details: created });
-
-      return res.json({ ok: true, mode: "created" });
-    }
+    return res.status(400).json({ error: "pageId ausente. Selecione um item para editar." });
   } catch (e) {
     res.status(500).json({ error: "Erro interno", details: String(e) });
   }
