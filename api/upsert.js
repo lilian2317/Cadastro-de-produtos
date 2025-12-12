@@ -77,11 +77,6 @@ if (GTIN) {
   // Opção B: NÃO mexer no GTIN existente no Notion (mais conservador)
   // (se escolher a Opção B, apague a linha acima)
 }
-    const properties = {
-      "GTIN": propGTIN(),
-      "Nome dos Produtos": propNome(),
-      "Domingas R$": propPreco(),
-    };
 
     if (pImg && IMG_URL) {
       properties["IMAGEM"] = {
