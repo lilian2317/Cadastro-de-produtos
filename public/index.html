@@ -5,66 +5,37 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Cadastro / Edição</title>
   <link rel="manifest" href="/manifest.json">
-
   <style>
     body{font-family:system-ui;background:#0b0b0b;color:#fff;margin:0}
     header{padding:18px;font-size:26px;font-weight:900;text-align:center}
     .wrap{padding:16px;display:grid;gap:12px;max-width:720px;margin:0 auto}
-
     button,input{font-size:22px;padding:16px;border-radius:16px;border:0;width:100%}
     button{background:#2f7cff;color:#fff;font-weight:900}
     button.save{background:#22c55e;color:#000}
     button.gray{background:#3a3a3a}
-
     .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     input{background:#fff;color:#000}
-
     .hint{font-size:18px;opacity:.9;line-height:1.3;text-align:center}
     .card{background:#151515;border-radius:18px;padding:16px}
-
-    .ok{
-      display:none;
-      background:#22c55e;
-      color:#071a0a;
-      font-weight:900;
-      text-align:center;
-      padding:12px;
-      border-radius:14px;
-    }
+    .ok{display:none;background:#22c55e;color:#071a0a;font-weight:900;text-align:center;padding:12px;border-radius:14px}
     .ok.show{display:block}
-
     #scanVideo{width:100%;border-radius:18px;background:#000;margin-top:10px}
-
-    .resultItem{
-      display:grid;
-      gap:10px;
-      padding:12px;
-      border-radius:14px;
-      background:#101010;
-      border:1px solid #2a2a2a;
-    }
-
+    .resultItem{display:grid;gap:10px;padding:12px;border-radius:14px;background:#101010;border:1px solid #2a2a2a}
     .resultTitle{font-size:22px;font-weight:900}
     .price{font-size:20px;font-weight:800}
     .price span{background:#ffe45c;color:#111;padding:4px 10px;border-radius:10px}
-
     img{width:100%;max-height:260px;object-fit:contain;border-radius:14px;background:#000}
     hr{border:0;border-top:1px solid #2a2a2a;margin:10px 0}
     .small{font-size:16px;opacity:.9}
   </style>
 </head>
-
 <body>
 <header>Cadastro / Edição</header>
 
 <div class="wrap">
-
-  <div class="hint">
-    🔎 Busque por <b>nome</b> ou <b>GTIN</b>. Selecione um item para editar.
-  </div>
+  <div class="hint">🔎 Busque por <b>nome</b> ou <b>GTIN</b>. Selecione um item para editar.</div>
 
   <input id="search" placeholder="Buscar por nome ou GTIN">
-
   <div class="row">
     <button id="btnBuscar">🔍 Buscar</button>
     <button class="gray" id="btnLimpar">🧹 Limpar</button>
@@ -77,14 +48,15 @@
   <div class="ok" id="ok">✅ CÓDIGO LIDO!</div>
 
   <div class="card" id="editor" style="display:none;">
-    <div class="hint" style="margin-bottom:10px;">
-      <b>Edição</b> (para mudar GTIN, use “Escanear GTIN”)
-    </div>
+    <div class="hint" style="margin-bottom:10px;"><b>Edição</b> (para mudar GTIN, use “Escanear GTIN”)</div>
 
     <div class="row">
       <button id="btnScanGtin">📷 Escanear GTIN</button>
       <button class="gray" id="btnFecharCam">✖ Fechar câmera</button>
     </div>
+
+    <!-- ✅ câmera agora fica AQUI dentro -->
+    <div id="scanMount"></div>
 
     <input id="gtin" placeholder="GTIN">
     <input id="nome" placeholder="Nome dos Produtos">
@@ -92,25 +64,21 @@
     <input id="imagemUrl" placeholder="URL da imagem (opcional — só se quiser trocar)">
 
     <button class="save" id="btnSalvar">💾 Salvar no Notion</button>
+    <button class="gray" id="btnVoltar">⬅ Voltar para resultados</button>
 
     <div id="preview" style="margin-top:12px;"></div>
   </div>
-
 </div>
 
 <script src="https://unpkg.com/@zxing/library@latest"></script>
 <script>
-let reader=null;
-let scanning=false;
-let videoEl=null;
-
-let selectedPageId="";     // atualiza o item correto
-let lastFoundItems=[];
-
+let reader=null, scanning=false, videoEl=null;
+let selectedPageId="", lastFoundItems=[];
 const statusEl = document.getElementById("status");
 const resultsBox = document.getElementById("results");
 const editorEl = document.getElementById("editor");
 const okEl = document.getElementById("ok");
+const scanMount = document.getElementById("scanMount");
 
 function setStatus(msg){ statusEl.textContent = msg; }
 
@@ -124,18 +92,15 @@ function beep(){
     setTimeout(()=>o.stop(),80);
   }catch(e){}
 }
-
 function flashGreen(){
   okEl.classList.add("show");
   setTimeout(()=>okEl.classList.remove("show"),800);
 }
-
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, m =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])
   );
 }
-
 function formatPrice(v){
   if(v === null || v === undefined || v === "") return "—";
   if(typeof v === "number"){
@@ -152,6 +117,7 @@ function stopScan(){
   }
   videoEl=null;
   scanning=false;
+  scanMount.innerHTML = ""; // ✅ garante que some
 }
 
 function showEditor(show){
@@ -178,7 +144,6 @@ async function buscar(){
   setStatus("Buscando no Notion…");
   resultsBox.style.display = "none";
   resultsBox.innerHTML = "";
-
   showEditor(false);
   selectedPageId = "";
   lastFoundItems = [];
@@ -205,7 +170,6 @@ async function buscar(){
     </div>
   `).join("<hr>");
 
-  // ✅ CORREÇÃO: usa addEventListener (funciona em iOS/Android/PWA)
   resultsBox.querySelectorAll(".resultItem").forEach(el => {
     el.addEventListener("click", () => {
       const idx = Number(el.dataset.idx);
@@ -220,28 +184,32 @@ function selecionar(i){
   if(!it) return;
 
   selectedPageId = it.pageId || "";
-
   document.getElementById("gtin").value = it.gtin || "";
   document.getElementById("nome").value = it.name || "";
   document.getElementById("preco").value = (it.preco ?? "") === null ? "" : String(it.preco ?? "");
-  document.getElementById("imagemUrl").value = ""; // só se quiser trocar
+  document.getElementById("imagemUrl").value = "";
 
+  // ✅ some com a lista e foca na edição
+  resultsBox.style.display = "none";
   showEditor(true);
   setStatus("Editando. Se quiser mudar o GTIN, use “Escanear GTIN”.");
   renderPreview(it);
+
+  // ✅ rola a tela pra área de edição
+  setTimeout(()=> editorEl.scrollIntoView({behavior:"smooth", block:"start"}), 50);
 }
 
 async function scanToGtin(){
   if(scanning) return;
   stopScan();
   scanning = true;
-
   setStatus("Aponte para o código de barras…");
 
+  // ✅ cria o vídeo dentro do editor (no scanMount)
   videoEl = document.createElement("video");
   videoEl.id = "scanVideo";
   videoEl.setAttribute("playsinline","true");
-  document.querySelector(".wrap").insertBefore(videoEl, statusEl);
+  scanMount.appendChild(videoEl);
 
   const hints = new Map();
   hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[
@@ -268,6 +236,16 @@ async function scanToGtin(){
   }
 }
 
+function getPassword(){
+  let p = sessionStorage.getItem("edit_password") || "";
+  if(!p){
+    p = prompt("Digite a senha para editar/atualizar o Notion:");
+    if(!p) return "";
+    sessionStorage.setItem("edit_password", p);
+  }
+  return p;
+}
+
 async function salvar(){
   stopScan();
 
@@ -278,20 +256,29 @@ async function salvar(){
 
   if(!gtin){ setStatus("Informe o GTIN (você pode escanear)."); return; }
   if(!nome){ setStatus("Informe o Nome dos Produtos."); return; }
-  if(!selectedPageId){
-    setStatus("Selecione um item na lista para editar.");
-    return;
-  }
+  if(!selectedPageId){ setStatus("Selecione um item na lista para editar."); return; }
+
+  const pass = getPassword();
+  if(!pass){ setStatus("Operação cancelada (senha não informada)."); return; }
 
   setStatus("Salvando no Notion…");
 
   const r = await fetch("/api/upsert", {
     method:"POST",
-    headers:{ "Content-Type":"application/json" },
+    headers:{
+      "Content-Type":"application/json",
+      "X-EDIT-PASSWORD": pass
+    },
     body: JSON.stringify({ pageId: selectedPageId, gtin, nome, preco, imagemUrl })
   });
 
   const d = await r.json().catch(()=>({}));
+
+  if(r.status === 401){
+    sessionStorage.removeItem("edit_password");
+    setStatus("Senha inválida. Tente novamente ao salvar.");
+    return;
+  }
 
   if(!r.ok || !d.ok){
     setStatus("Erro ao salvar. Se quiser, me mande print desta tela.");
@@ -299,6 +286,17 @@ async function salvar(){
   }
 
   setStatus("✅ Atualizado no Notion!");
+}
+
+function voltarResultados(){
+  stopScan();
+  showEditor(false);
+  if(lastFoundItems.length){
+    resultsBox.style.display = "block";
+    setStatus(`Resultados (toque em um para editar).`);
+  } else {
+    setStatus("Aguardando…");
+  }
 }
 
 function limparTudo(){
@@ -313,18 +311,16 @@ function limparTudo(){
   setStatus("Aguardando…");
 }
 
-// atalhos de botão
 document.getElementById("btnBuscar").addEventListener("click", buscar);
 document.getElementById("btnLimpar").addEventListener("click", limparTudo);
 document.getElementById("btnScanGtin").addEventListener("click", scanToGtin);
 document.getElementById("btnFecharCam").addEventListener("click", stopScan);
 document.getElementById("btnSalvar").addEventListener("click", salvar);
+document.getElementById("btnVoltar").addEventListener("click", voltarResultados);
 
-// Enter no teclado faz buscar
 document.getElementById("search").addEventListener("keydown", (e) => {
   if(e.key === "Enter") buscar();
 });
 </script>
-
 </body>
 </html>
